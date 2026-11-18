@@ -1,0 +1,46 @@
+# Rust
+/target/
+**/target/
+**/*.rs.bk
+
+# Node.js / Vite
+/node_modules/
+/dist/
+/coverage/
+**/node_modules/
+**/dist/
+**/coverage/
+.vite/
+**/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Operating system
+.DS_Store
+**/.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors and IDEs
+.idea/
+.vscode/
+**/.idea/
+**/.vscode/
+*.swp
+*.swo
+*~
+
+# Local deployment images and database backups
+/queue-images.tar
+/queue-backup.sql
+/queue-backup.sql.gz

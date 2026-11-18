@@ -1,0 +1,16 @@
+[package]
+name = "queue"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7"
+argon2 = "0.5"
+jsonwebtoken = "9"
+hex = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "mysql", "macros", "migrate"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+uuid = { version = "1", features = ["v4", "serde"] }

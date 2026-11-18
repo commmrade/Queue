@@ -1,0 +1,17 @@
+# Rust output and local Cargo cache
+/target
+**/target
+**/*.rs.bk
+
+# Frontend/local artifacts must not enter the backend build context
+**/node_modules
+**/dist
+**/coverage
+
+# Repository metadata, local environment and editor files
+.git
+.env*
+.idea
+.vscode
+.DS_Store
+*.log

@@ -1,0 +1,19 @@
+# Frontend dependency and build output
+/node_modules
+/dist
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+
+# Repository metadata, local environment and editor files
+.git
+.env*
+.idea
+.vscode
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
