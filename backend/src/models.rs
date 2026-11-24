@@ -36,7 +36,7 @@ impl Role {
 #[derive(Clone)]
 pub(crate) struct User {
     pub(crate) id: Uuid,
-    pub(crate) email: String,
+    pub(crate) username: String,
     pub(crate) password_hash: String,
     pub(crate) role: Role,
 }
@@ -44,7 +44,7 @@ pub(crate) struct User {
 #[derive(FromRow)]
 pub(crate) struct AccountRow {
     pub(crate) id: String,
-    pub(crate) email: String,
+    pub(crate) username: String,
     pub(crate) password_hash: String,
     pub(crate) role: String,
 }
@@ -55,7 +55,7 @@ impl TryFrom<AccountRow> for User {
     fn try_from(row: AccountRow) -> Result<Self, Self::Error> {
         Ok(Self {
             id: parse_uuid(&row.id)?,
-            email: row.email,
+            username: row.username,
             password_hash: row.password_hash,
             role: Role::from_database(&row.role).ok_or_else(|| {
                 api_error(
@@ -70,7 +70,7 @@ impl TryFrom<AccountRow> for User {
 #[derive(Serialize)]
 pub(crate) struct PublicUser {
     pub(crate) id: Uuid,
-    pub(crate) email: String,
+    pub(crate) username: String,
     pub(crate) role: Role,
 }
 
@@ -78,7 +78,7 @@ impl From<&User> for PublicUser {
     fn from(user: &User) -> Self {
         Self {
             id: user.id,
-            email: user.email.clone(),
+            username: user.username.clone(),
             role: user.role,
         }
     }
@@ -157,7 +157,7 @@ pub(crate) struct JoinResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct Credentials {
-    pub(crate) email: String,
+    pub(crate) username: String,
     pub(crate) password: String,
 }
 

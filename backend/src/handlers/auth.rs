@@ -1,7 +1,7 @@
 use crate::{
     auth::{
         authenticated_user, clear_jwt_cookie, create_token, decode_token, jwt_cookie,
-        normalize_email, token_from_headers,
+        normalize_username, token_from_headers,
     },
     error::{api_error, db_error, is_duplicate, now_seconds, ApiError},
     models::{AccountRow, Credentials, PublicUser, Role, User},
@@ -23,8 +23,12 @@ pub(super) async fn register(
     State(state): State<AppState>,
     Json(input): Json<Credentials>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let email = normalize_email(&input.email)
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Введите корректную почту"))?;
+    let username = normalize_username(&input.username).ok_or_else(|| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "Имя пользователя: 3–32 символа, латинские буквы, цифры и _",
+        )
+    })?;
     if !(8..=128).contains(&input.password.len()) {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
@@ -43,21 +47,21 @@ pub(super) async fn register(
         .to_string();
     let user = User {
         id: uuid::Uuid::new_v4(),
-        email: email.clone(),
+        username: username.clone(),
         password_hash: password_hash.clone(),
         role: Role::User,
     };
     let token = create_token(user.id, &state)?;
-    sqlx::query("INSERT INTO accounts (id, email, password_hash, role, created_at) VALUES (?, ?, ?, 'user', ?)")
+    sqlx::query("INSERT INTO accounts (id, username, password_hash, role, created_at) VALUES (?, ?, ?, 'user', ?)")
         .bind(user.id.to_string())
-        .bind(&email)
+        .bind(&username)
         .bind(password_hash)
         .bind(now_seconds())
         .execute(&state.db)
         .await
         .map_err(|error| {
             if is_duplicate(&error) {
-                api_error(StatusCode::CONFLICT, "Аккаунт с такой почтой уже существует")
+                api_error(StatusCode::CONFLICT, "Это имя пользователя уже занято")
             } else {
                 db_error(error)
             }
@@ -74,16 +78,25 @@ pub(super) async fn login(
     State(state): State<AppState>,
     Json(input): Json<Credentials>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let email = normalize_email(&input.email)
-        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "Введите корректную почту"))?;
+    let username = normalize_username(&input.username).ok_or_else(|| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "Имя пользователя: 3–32 символа, латинские буквы, цифры и _",
+        )
+    })?;
     let row = sqlx::query_as::<_, AccountRow>(
-        "SELECT id, email, password_hash, role FROM accounts WHERE email = ?",
+        "SELECT id, username, password_hash, role FROM accounts WHERE username = ?",
     )
-    .bind(email)
+    .bind(username)
     .fetch_optional(&state.db)
     .await
     .map_err(db_error)?
-    .ok_or_else(|| api_error(StatusCode::UNAUTHORIZED, "Неверная почта или пароль"))?;
+    .ok_or_else(|| {
+        api_error(
+            StatusCode::UNAUTHORIZED,
+            "Неверное имя пользователя или пароль",
+        )
+    })?;
     let user = User::try_from(row)?;
     let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|_| {
         api_error(
@@ -97,7 +110,7 @@ pub(super) async fn login(
     {
         return Err(api_error(
             StatusCode::UNAUTHORIZED,
-            "Неверная почта или пароль",
+            "Неверное имя пользователя или пароль",
         ));
     }
     let token = create_token(user.id, &state)?;

@@ -98,7 +98,7 @@ pub(crate) async fn authenticated_user(
         return Err(api_error(StatusCode::UNAUTHORIZED, "JWT отозван"));
     }
     let row = sqlx::query_as::<_, AccountRow>(
-        "SELECT id, email, password_hash, role FROM accounts WHERE id = ?",
+        "SELECT id, username, password_hash, role FROM accounts WHERE id = ?",
     )
     .bind(user_id.to_string())
     .fetch_optional(&state.db)
@@ -148,14 +148,11 @@ pub(crate) fn clear_jwt_cookie() -> HeaderValue {
     .expect("expired JWT cookie is valid")
 }
 
-pub(crate) fn normalize_email(raw: &str) -> Option<String> {
-    let email = raw.trim().to_lowercase();
-    let (local, domain) = email.split_once('@')?;
-    (email.len() <= 254
-        && !local.is_empty()
-        && domain.contains('.')
-        && !domain.starts_with('.')
-        && !domain.ends_with('.')
-        && !email.chars().any(char::is_whitespace))
-    .then_some(email)
+pub(crate) fn normalize_username(raw: &str) -> Option<String> {
+    let username = raw.trim().to_lowercase();
+    ((3..=32).contains(&username.len())
+        && username.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        }))
+    .then_some(username)
 }

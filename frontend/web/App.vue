@@ -11,7 +11,8 @@ const createOpen = ref(false)
 const queueOpen = ref(false)
 const authOpen = ref(false)
 const authMode = ref('register')
-const authForm = ref({ email: '', password: '' })
+const darkTheme = ref(false)
+const authForm = ref({ username: '', password: '' })
 const editingQueue = ref(null)
 const createForm = ref({ title: '', course: '', teacher: '' })
 const joinName = ref('')
@@ -64,7 +65,7 @@ async function submitAuth() {
       body: JSON.stringify(authForm.value),
     })
     authOpen.value = false
-    authForm.value = { email: '', password: '' }
+    authForm.value = { username: '', password: '' }
     toast(authMode.value === 'register' ? 'Аккаунт создан' : 'Вы вошли в аккаунт')
   } catch (error) {
     toast(error.message)
@@ -85,6 +86,20 @@ function toast(message) {
   toastMessage.value = message
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => (toastMessage.value = ''), 2400)
+}
+
+function setDarkTheme(enabled) {
+  darkTheme.value = enabled
+  document.documentElement.dataset.theme = enabled ? 'dark' : 'light'
+  try {
+    localStorage.setItem('queue-theme', enabled ? 'dark' : 'light')
+  } catch {
+    // The theme still applies for this session when storage is unavailable.
+  }
+}
+
+function toggleTheme() {
+  setDarkTheme(!darkTheme.value)
 }
 
 function initials(name) {
@@ -274,6 +289,13 @@ function closeOnEscape(event) {
 }
 
 onMounted(() => {
+  let savedTheme
+  try {
+    savedTheme = localStorage.getItem('queue-theme')
+  } catch {
+    savedTheme = null
+  }
+  setDarkTheme(savedTheme ? savedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches)
   checkSession()
   loadQueues()
   refreshTimer = setInterval(() => {
@@ -294,7 +316,7 @@ onUnmounted(() => {
 <template>
   <header class="topbar shell">
     <div class="brand"><span class="brand-mark">↗</span> очередь<span class="brand-tail">/даль</span></div>
-    <div class="header-right"><span class="tag">ДВФУ · ПРОСТРАНСТВО ДЛЯ ПОКАЗОВ</span><div v-if="user" class="account"><span v-if="isAdmin" class="admin-badge">АДМИН</span><span>{{ user.email }}</span><button class="account-action" @click="logout">Выйти</button></div><button v-else class="account-action" @click="authMode = 'login'; authOpen = true">Войти</button></div>
+    <div class="header-right"><span class="tag">ДВФУ · ПРОСТРАНСТВО ДЛЯ ПОКАЗОВ</span><button class="theme-toggle" type="button" :aria-label="darkTheme ? 'Включить светлую тему' : 'Включить тёмную тему'" :title="darkTheme ? 'Светлая тема' : 'Тёмная тема'" @click="toggleTheme">{{ darkTheme ? '☀' : '☾' }}</button><div v-if="user" class="account"><span v-if="isAdmin" class="admin-badge">АДМИН</span><span>{{ user.username }}</span><button class="account-action" @click="logout">Выйти</button></div><button v-else class="account-action" @click="authMode = 'login'; authOpen = true">Войти</button></div>
   </header>
 
   <main class="shell">
@@ -363,7 +385,7 @@ onUnmounted(() => {
   <div v-if="authOpen" class="modal-backdrop" @click.self="authOpen = false">
     <form class="modal" @submit.prevent="submitAuth">
       <div class="modal-head"><div><p class="eyebrow">АККАУНТ ДВФУ</p><h2>{{ authMode === 'register' ? 'Регистрация' : 'Вход' }}</h2></div><button class="close" type="button" aria-label="Закрыть" @click="authOpen = false">×</button></div>
-      <label class="field" for="auth-email">Электронная почта</label><input id="auth-email" v-model="authForm.email" type="email" placeholder="you@example.com" required maxlength="254" autocomplete="email" />
+      <label class="field" for="auth-username">Имя пользователя</label><input id="auth-username" v-model="authForm.username" type="text" placeholder="например, ivan_23" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]+" autocomplete="username" />
       <label class="field" for="auth-password">Пароль</label><input id="auth-password" v-model="authForm.password" type="password" :placeholder="authMode === 'register' ? 'Не менее 8 символов' : 'Ваш пароль'" required minlength="8" maxlength="128" :autocomplete="authMode === 'register' ? 'new-password' : 'current-password'" />
       <button class="primary submit" type="submit">{{ authMode === 'register' ? 'Создать аккаунт' : 'Войти' }} <span>→</span></button>
       <button class="mode-switch" type="button" @click="authMode = authMode === 'register' ? 'login' : 'register'">{{ authMode === 'register' ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться' }}</button>

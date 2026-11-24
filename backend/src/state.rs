@@ -1,5 +1,5 @@
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -17,11 +17,7 @@ impl AppState {
         }
 
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be configured");
-        let db = MySqlPoolOptions::new()
-            .max_connections(10)
-            .connect(&database_url)
-            .await
-            .expect("could not connect to MariaDB");
+        let db = connect_to_database(&database_url).await;
         sqlx::migrate!()
             .run(&db)
             .await
@@ -32,4 +28,27 @@ impl AppState {
             jwt_secret: Arc::new(jwt_secret),
         }
     }
+}
+
+async fn connect_to_database(database_url: &str) -> MySqlPool {
+    const MAX_ATTEMPTS: u32 = 30;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        match MySqlPoolOptions::new()
+            .max_connections(10)
+            .connect(database_url)
+            .await
+        {
+            Ok(db) => return db,
+            Err(error) if matches!(&error, sqlx::Error::Io(_)) && attempt < MAX_ATTEMPTS => {
+                eprintln!("MariaDB is not ready (attempt {attempt}/{MAX_ATTEMPTS}); retrying in 1 second: {error}");
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            Err(error) => {
+                panic!("could not connect to MariaDB after {attempt} attempt(s): {error}");
+            }
+        }
+    }
+
+    unreachable!("database connection loop always returns or panics")
 }
