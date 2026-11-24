@@ -21,6 +21,10 @@ pub(crate) fn router(state: AppState) -> Router {
         .route("/api/queues/:id/join", post(queues::join_queue))
         .route("/api/queues/:id/subqueues", post(queues::create_subqueue))
         .route(
+            "/api/queues/:id/subqueues/:subqueue_id",
+            axum::routing::put(queues::rename_subqueue),
+        )
+        .route(
             "/api/queues/:id/subqueues/:subqueue_id/open",
             axum::routing::put(queues::set_subqueue_open),
         )

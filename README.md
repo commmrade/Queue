@@ -151,6 +151,6 @@ docker compose exec -T mariadb sh -c 'mariadb-dump -u root -p"$MARIADB_ROOT_PASS
 
 - Авторизация: `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
 - Очереди: `GET/POST /api/queues`, `PUT/DELETE /api/queues/:id`.
-- Подочереди: `POST /api/queues/:id/subqueues` (добавить), `PUT /api/queues/:id/subqueues/:subqueue_id/open` (открыть или закрыть запись), `POST /api/queues/:id/subqueues/:subqueue_id/join` (записаться).
+- Подочереди: `POST /api/queues/:id/subqueues` (добавить), `PUT /api/queues/:id/subqueues/:subqueue_id` (переименовать), `PUT /api/queues/:id/subqueues/:subqueue_id/open` (открыть или закрыть запись), `POST /api/queues/:id/subqueues/:subqueue_id/join` (записаться).
 - Участники: `DELETE /api/queues/:id/entries/:entry_id` (выход по секрету записи), `DELETE /api/queues/:id/manage/entries/:entry_id` (удаление администратором).
 - Состояние backend: `GET /health`.

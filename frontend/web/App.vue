@@ -22,6 +22,8 @@ const subqueueDraft = ref('')
 const joinNames = ref({})
 const newSubqueueName = ref('')
 const pendingSubqueueTitles = ref([])
+const editingSubqueueId = ref(null)
+const subqueueTitleDraft = ref('')
 const toastMessage = ref('')
 let toastTimer
 let refreshTimer
@@ -291,6 +293,33 @@ async function toggleSubqueue(subqueue) {
   }
 }
 
+function startRenameSubqueue(subqueue) {
+  editingSubqueueId.value = subqueue.id
+  subqueueTitleDraft.value = subqueue.title
+}
+
+function cancelRenameSubqueue() {
+  editingSubqueueId.value = null
+  subqueueTitleDraft.value = ''
+}
+
+async function renameSubqueue(subqueue) {
+  const title = subqueueTitleDraft.value.trim()
+  if (!title || title === subqueue.title) return cancelRenameSubqueue()
+  try {
+    const updated = await request(`${api}/${active.value.id}/subqueues/${subqueue.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    })
+    active.value = updated
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
+    cancelRenameSubqueue()
+    toast('Название подочереди изменено')
+  } catch (error) {
+    toast(error.message)
+  }
+}
+
 async function addSubqueue() {
   stageSubqueueDraft(newSubqueueName, pendingSubqueueTitles)
   const titles = [...pendingSubqueueTitles.value]
@@ -532,7 +561,7 @@ onUnmounted(() => {
       <form v-if="isAdmin" class="add-subqueue" @submit.prevent="addSubqueue"><div class="subqueue-tagbox"><span v-for="(title, index) in pendingSubqueueTitles" :key="`${title}-${index}`" class="subqueue-tag">{{ title }}<button type="button" :aria-label="`Убрать ${title}`" @click="pendingSubqueueTitles.splice(index, 1)">×</button></span><input v-model="newSubqueueName" placeholder="Название этапа и пробел…" maxlength="120" @keydown="pendingSubqueueKeydown" @blur="pendingSubqueueBlur" @paste="pendingSubqueuePaste" /></div><button class="manage-button" type="submit">Добавить{{ pendingSubqueueTitles.length > 1 ? ` (${pendingSubqueueTitles.length})` : '' }}</button></form>
       <div class="subqueue-list">
         <section v-for="subqueue in active.subqueues" :key="subqueue.id" class="subqueue-section">
-          <div class="subqueue-heading"><div><h3>{{ subqueue.title }}</h3><span class="subqueue-count">{{ subqueue.entries.length }} участников</span></div><button v-if="isAdmin" class="manage-button" @click="toggleSubqueue(subqueue)">{{ subqueue.is_open ? 'Закрыть запись' : 'Открыть запись' }}</button><span v-else class="subqueue-status" :class="{ closed: !subqueue.is_open || !active.is_open }">{{ active.is_open && subqueue.is_open ? 'ОТКРЫТА' : 'ЗАКРЫТА' }}</span></div>
+          <div class="subqueue-heading"><div class="subqueue-title-block"><form v-if="editingSubqueueId === subqueue.id" class="rename-subqueue" @submit.prevent="renameSubqueue(subqueue)"><input v-model="subqueueTitleDraft" maxlength="120" required aria-label="Новое название подочереди" /><button class="manage-button" type="submit">Сохранить</button><button class="manage-button" type="button" @click="cancelRenameSubqueue">Отмена</button></form><template v-else><h3>{{ subqueue.title }}</h3><button v-if="isAdmin" class="rename-link" type="button" @click="startRenameSubqueue(subqueue)">Изменить название</button></template><span class="subqueue-count">{{ subqueue.entries.length }} участников</span></div><div class="subqueue-controls"><button v-if="isAdmin" class="manage-button" @click="toggleSubqueue(subqueue)">{{ subqueue.is_open ? 'Закрыть запись' : 'Открыть запись' }}</button><span v-else class="subqueue-status" :class="{ closed: !subqueue.is_open || !active.is_open }">{{ active.is_open && subqueue.is_open ? 'ОТКРЫТА' : 'ЗАКРЫТА' }}</span></div></div>
           <form v-if="active.is_open && subqueue.is_open" class="join-form" @submit.prevent="joinQueue(subqueue.id)"><input v-model="joinNames[subqueue.id]" placeholder="Ваша фамилия" required maxlength="50" autocomplete="name" /><button class="primary" type="submit">Записаться <span>→</span></button></form>
           <ol class="people">
             <li v-if="subqueue.entries.length === 0" class="empty-list">В этой подочереди пока никого нет.</li>

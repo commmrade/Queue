@@ -3,7 +3,8 @@ use crate::{
     db::fetch_queue,
     error::{api_error, db_error, is_duplicate, now_seconds, parse_uuid, ApiError},
     models::{
-        CreateQueue, CreateSubqueue, JoinQueue, JoinResponse, Queue, SetSubqueueOpen, UpdateQueue,
+        CreateQueue, CreateSubqueue, JoinQueue, JoinResponse, Queue, SetSubqueueOpen,
+        UpdateQueue, UpdateSubqueueTitle,
     },
     state::AppState,
 };
@@ -159,6 +160,45 @@ pub(super) async fn create_subqueue(
                 db_error(error)
             }
         })?;
+    Ok(Json(fetch_queue(&state.db, queue_id).await?))
+}
+
+pub(super) async fn rename_subqueue(
+    Path((queue_id, subqueue_id)): Path<(Uuid, Uuid)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<UpdateSubqueueTitle>,
+) -> Result<Json<Queue>, ApiError> {
+    let user = authenticated_user(&headers, &state).await?;
+    if !user.role.is_admin() {
+        return Err(api_error(
+            StatusCode::FORBIDDEN,
+            "Управлять очередями могут только администраторы",
+        ));
+    }
+    let title = input.title.trim();
+    if title.is_empty() || title.chars().count() > 120 {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "Укажите название подочереди (до 120 символов)",
+        ));
+    }
+    let result = sqlx::query("UPDATE queue_subqueues SET title = ? WHERE id = ? AND queue_id = ?")
+        .bind(title)
+        .bind(subqueue_id.to_string())
+        .bind(queue_id.to_string())
+        .execute(&state.db)
+        .await
+        .map_err(|error| {
+            if is_duplicate(&error) {
+                api_error(StatusCode::CONFLICT, "Подочередь с таким названием уже есть")
+            } else {
+                db_error(error)
+            }
+        })?;
+    if result.rows_affected() == 0 {
+        return Err(api_error(StatusCode::NOT_FOUND, "Подочередь не найдена"));
+    }
     Ok(Json(fetch_queue(&state.db, queue_id).await?))
 }
 

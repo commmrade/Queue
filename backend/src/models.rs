@@ -190,6 +190,11 @@ pub(crate) struct CreateSubqueue {
 }
 
 #[derive(Deserialize)]
+pub(crate) struct UpdateSubqueueTitle {
+    pub(crate) title: String,
+}
+
+#[derive(Deserialize)]
 pub(crate) struct SetSubqueueOpen {
     pub(crate) is_open: bool,
 }

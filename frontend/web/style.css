@@ -64,13 +64,21 @@
 .subqueue-list{display:grid;gap:14px}
 .subqueue-section{border:1px solid var(--line);border-radius:12px;padding:14px}
 .subqueue-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.subqueue-title-block{min-width:0;flex:1}
+.subqueue-controls{display:flex;align-items:center;gap:6px;flex:none}
 .subqueue-heading h3{margin:0;font-size:15px;letter-spacing:-.3px}
+.rename-link{display:block;margin:4px 0 0;padding:0;border:0;background:none;color:#748365;font-size:10px}
+.rename-link:hover{text-decoration:underline}
+.rename-subqueue{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5px}
+.rename-subqueue input{min-width:100px;flex:1;border:1px solid #dedfd7;border-radius:7px;padding:8px 9px;background:var(--white);color:var(--ink);font:12px Manrope,sans-serif}
 .subqueue-count{display:block;margin-top:4px;color:var(--muted);font-size:10px}
 .subqueue-status{font:9px 'DM Mono',monospace;color:#688343}
 .subqueue-status.closed{color:#9b684d}
 .subqueue-section .join-form{margin:12px 0}
 .subqueue-section .people{max-height:230px}
 :root[data-theme="dark"] .subqueue-section{border-color:#3b463d;background:#19211b}
+:root[data-theme="dark"] .rename-link{color:#b8d28f}
+:root[data-theme="dark"] .rename-subqueue input{border-color:#3d4940}
 :root[data-theme="dark"] .subqueue-chip{border-color:#3b463d;color:#a0aaa1}
 :root[data-theme="dark"] .subqueue-chip b{color:var(--ink)}
 :root[data-theme="dark"] .add-subqueue input,:root[data-theme="dark"] .modal textarea{background:#111713;border-color:#3d4940;color:var(--ink)}
