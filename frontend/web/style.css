@@ -69,3 +69,9 @@
 :root[data-theme="dark"] .add-subqueue input,:root[data-theme="dark"] .modal textarea{background:#111713;border-color:#3d4940;color:var(--ink)}
 :root[data-theme="dark"] .subqueue-status{color:#b5d47b}
 :root[data-theme="dark"] .subqueue-status.closed{color:#e3a17f}
+.toolbar-title{display:flex;align-items:center}
+.filter-button{margin-left:18px;border:1px solid var(--line);border-radius:8px;background:var(--white);color:var(--muted);padding:9px 12px 9px 18px;font-size:11px;font-weight:700;white-space:nowrap}
+.filter-button:hover,.filter-button.selected{border-color:#b5c49d;color:var(--ink)}
+:root[data-theme="dark"] .filter-button{background:#202823;color:#b8d28f;border-color:#3d4940}
+:root[data-theme="dark"] .filter-button:hover,:root[data-theme="dark"] .filter-button.selected{border-color:#71875a;color:var(--ink)}
+@media(max-width:560px){.toolbar{flex-wrap:wrap;gap:10px}.toolbar-title{flex-wrap:wrap;row-gap:7px}.filter-button{margin-left:12px;padding:7px 9px 7px 14px}}

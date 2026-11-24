@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 const api = '/api/queues'
 const queues = ref([])
+const myEntryIds = ref(new Set())
+const showMyQueues = ref(false)
 const user = ref(null)
 const active = ref(null)
 const loading = ref(true)
@@ -21,8 +23,19 @@ const toastMessage = ref('')
 let toastTimer
 let refreshTimer
 
+const visibleQueues = computed(() => {
+  if (!showMyQueues.value) return queues.value
+  return queues.value.filter((queue) => queue.subqueues.some((subqueue) =>
+    subqueue.entries.some((entry) => myEntryIds.value.has(entry.id)),
+  ))
+})
+
+const myQueueCount = computed(() => queues.value.filter((queue) => queue.subqueues.some((subqueue) =>
+  subqueue.entries.some((entry) => myEntryIds.value.has(entry.id)),
+)).length)
+
 const queueCount = computed(() => {
-  const count = queues.value.length
+  const count = visibleQueues.value.length
   if (count === 1) return '1 ОЧЕРЕДЬ'
   if (count > 1 && count < 5) return `${count} ОЧЕРЕДИ`
   return `${count} ОЧЕРЕДЕЙ`
@@ -124,6 +137,23 @@ function leaveCredentials(queueId) {
   } catch {
     return []
   }
+}
+
+function syncMyEntries() {
+  const entryIds = new Set()
+  try {
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index)
+      if (!key?.startsWith('queue-leave-')) continue
+      const queueId = key.slice('queue-leave-'.length)
+      for (const credential of leaveCredentials(queueId)) {
+        if (credential.entryId) entryIds.add(credential.entryId)
+      }
+    }
+  } catch {
+    // The personal queue filter is unavailable when browser storage is blocked.
+  }
+  myEntryIds.value = entryIds
 }
 
 function saveLeaveCredentials(queueId, credentials) {
@@ -293,6 +323,7 @@ async function joinQueue(subqueueId) {
     const credentials = leaveCredentials(queue.id).filter((item) => item.entryId !== entry.id)
     credentials.push({ entryId: entry.id, token: result.leave_token })
     saveLeaveCredentials(queue.id, credentials)
+    syncMyEntries()
     active.value = queue
     joinNames.value[subqueueId] = ''
     toast(`Вы записаны в «${subqueue.title}» под номером ${subqueue.entries.length}`)
@@ -310,6 +341,7 @@ async function removeMe(entryId) {
       headers: { 'X-Queue-Leave-Token': credential?.token || '' },
     })
     saveLeaveCredentials(active.value.id, credentials.filter((item) => item.entryId !== entryId))
+    syncMyEntries()
     toast('Вы вышли из очереди')
   } catch (error) {
     toast(error.message)
@@ -351,6 +383,7 @@ function closeOnEscape(event) {
 }
 
 onMounted(() => {
+  syncMyEntries()
   let savedTheme
   try {
     savedTheme = localStorage.getItem('queue-theme')
@@ -391,7 +424,7 @@ onUnmounted(() => {
     </section>
 
     <div class="toolbar">
-      <div><span class="section-title">Открытые очереди</span><span class="count">{{ loading ? 'ЗАГРУЗКА…' : queueCount }}</span></div>
+      <div class="toolbar-title"><span class="section-title">{{ showMyQueues ? 'Мои очереди' : 'Открытые очереди' }}</span><span class="count">{{ loading ? 'ЗАГРУЗКА…' : queueCount }}</span><button class="filter-button" :class="{ selected: showMyQueues }" type="button" title="Личные записи, сохранённые в этом браузере" @click="showMyQueues = !showMyQueues">{{ showMyQueues ? 'Все очереди' : `Мои очереди · ${myQueueCount}` }}</button></div>
       <button v-if="isAdmin" class="primary" @click="startCreate"><span class="plus">+</span> Создать очередь</button>
       <span v-else class="admin-note">Создавать очереди могут администраторы</span>
     </div>
@@ -399,8 +432,9 @@ onUnmounted(() => {
     <section class="grid">
       <div v-if="loading" class="blank">Загружаем очереди…</div>
       <div v-else-if="loadError" class="blank"><div><strong>Не удалось загрузить очереди</strong>{{ loadError }}. Обновите страницу.</div></div>
-      <div v-else-if="queues.length === 0" class="blank"><div><strong>Пока здесь тихо</strong>Создайте первую очередь и поделитесь ссылкой с группой.</div></div>
-      <article v-for="queue in queues" :key="queue.id" class="card">
+      <div v-else-if="showMyQueues && visibleQueues.length === 0" class="blank"><div><strong>Вы пока никуда не записаны</strong>Запишитесь в подочередь — она появится здесь.</div></div>
+      <div v-else-if="!showMyQueues && queues.length === 0" class="blank"><div><strong>Пока здесь тихо</strong>Создайте первую очередь и поделитесь ссылкой с группой.</div></div>
+      <article v-for="queue in visibleQueues" :key="queue.id" class="card">
         <div class="card-top"><span class="course">{{ queue.course || 'ПОКАЗ' }}</span><span class="live" :class="{ 'is-closed': isFullyClosed(queue) }">{{ isFullyClosed(queue) ? 'ЗАПИСЬ ЗАКРЫТА' : 'ОТКРЫТА' }}</span></div>
         <h2>{{ queue.title }}</h2>
         <div class="teacher">{{ queue.teacher ? `Преподаватель · ${queue.teacher}` : 'Можно записаться прямо сейчас' }}</div>
