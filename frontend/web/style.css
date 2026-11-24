@@ -51,9 +51,16 @@
 .subqueue-chip{padding:5px 7px;border:1px solid var(--line);border-radius:6px;color:var(--muted);font:9px 'DM Mono',monospace}
 .subqueue-chip b{color:var(--ink);margin-left:3px}
 .queue-modal{max-height:calc(100vh - 40px);overflow:auto}
-.add-subqueue{display:flex;gap:8px;margin:0 0 14px}
+.add-subqueue{display:flex;flex-direction:column;gap:8px;margin:0 0 14px}
 .add-subqueue input,.modal textarea{min-width:0;flex:1;border:1px solid #dedfd7;border-radius:9px;padding:10px 12px;background:white;font:12px Manrope,sans-serif;color:var(--ink)}
 .modal textarea{width:100%;resize:vertical}
+.subqueue-tagbox{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-height:46px;width:100%;padding:7px 9px;border:1px solid #dedfd7;border-radius:9px;background:white}
+.subqueue-tagbox:focus-within{border-color:#8da66a}
+.subqueue-tagbox input{flex:1 1 150px!important;width:auto!important;min-width:130px!important;border:0!important;outline:0;padding:5px!important;background:transparent!important;box-shadow:none!important}
+.subqueue-tag{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:5px 8px;border-radius:6px;background:#edf3e4;color:#405333;font-size:11px;overflow-wrap:anywhere}
+.subqueue-tag button{border:0;background:none;color:#738364;font-size:15px;line-height:12px;padding:0 1px}
+.subqueue-tag button:hover{color:#b45d43}
+.subqueue-help{margin:7px 0 0;color:var(--muted);font-size:10px;line-height:1.5}
 .subqueue-list{display:grid;gap:14px}
 .subqueue-section{border:1px solid var(--line);border-radius:12px;padding:14px}
 .subqueue-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -67,6 +74,9 @@
 :root[data-theme="dark"] .subqueue-chip{border-color:#3b463d;color:#a0aaa1}
 :root[data-theme="dark"] .subqueue-chip b{color:var(--ink)}
 :root[data-theme="dark"] .add-subqueue input,:root[data-theme="dark"] .modal textarea{background:#111713;border-color:#3d4940;color:var(--ink)}
+:root[data-theme="dark"] .subqueue-tagbox{background:#111713;border-color:#3d4940}
+:root[data-theme="dark"] .subqueue-tag{background:#35432c;color:#d6e5c1}
+:root[data-theme="dark"] .subqueue-tag button{color:#b8d28f}
 :root[data-theme="dark"] .subqueue-status{color:#b5d47b}
 :root[data-theme="dark"] .subqueue-status.closed{color:#e3a17f}
 .toolbar-title{display:flex;align-items:center}

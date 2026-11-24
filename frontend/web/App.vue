@@ -16,9 +16,12 @@ const authMode = ref('register')
 const darkTheme = ref(false)
 const authForm = ref({ username: '', password: '' })
 const editingQueue = ref(null)
-const createForm = ref({ title: '', course: '', teacher: '', subqueuesText: '' })
+const createForm = ref({ title: '', course: '', teacher: '' })
+const subqueueTitles = ref([])
+const subqueueDraft = ref('')
 const joinNames = ref({})
 const newSubqueueName = ref('')
+const pendingSubqueueTitles = ref([])
 const toastMessage = ref('')
 let toastTimer
 let refreshTimer
@@ -167,6 +170,8 @@ function saveLeaveCredentials(queueId, credentials) {
 function openQueue(id) {
   active.value = queues.value.find((queue) => queue.id === id) || null
   if (!active.value) return
+  newSubqueueName.value = ''
+  pendingSubqueueTitles.value = []
   queueOpen.value = true
   history.replaceState(null, '', `#${id}`)
 }
@@ -210,12 +215,14 @@ async function createQueue() {
         title: createForm.value.title,
         course: createForm.value.course,
         teacher: createForm.value.teacher,
-        subqueues: createForm.value.subqueuesText.split('\n').map((title) => title.trim()).filter(Boolean),
+        subqueues: subqueueTitles.value,
       }),
     })
     queues.value = sortQueues([queue, ...queues.value])
     createOpen.value = false
-    createForm.value = { title: '', course: '', teacher: '', subqueuesText: '' }
+    createForm.value = { title: '', course: '', teacher: '' }
+    subqueueTitles.value = []
+    subqueueDraft.value = ''
     toast('Очередь создана — поделитесь ссылкой')
     openQueue(queue.id)
   } catch (error) {
@@ -226,14 +233,16 @@ async function createQueue() {
 function startCreate() {
   if (!isAdmin.value) return
   editingQueue.value = null
-  createForm.value = { title: '', course: '', teacher: '', subqueuesText: '' }
+  createForm.value = { title: '', course: '', teacher: '' }
+  subqueueTitles.value = []
+  subqueueDraft.value = ''
   createOpen.value = true
 }
 
 function startEdit(queue = active.value) {
   if (!queue || !isAdmin.value) return
   editingQueue.value = queue
-  createForm.value = { title: queue.title, course: queue.course, teacher: queue.teacher, subqueuesText: '' }
+  createForm.value = { title: queue.title, course: queue.course, teacher: queue.teacher }
   createOpen.value = true
 }
 
@@ -283,19 +292,75 @@ async function toggleSubqueue(subqueue) {
 }
 
 async function addSubqueue() {
-  if (!active.value || !isAdmin.value || !newSubqueueName.value.trim()) return
+  stageSubqueueDraft(newSubqueueName, pendingSubqueueTitles)
+  const titles = [...pendingSubqueueTitles.value]
+  if (!active.value || !isAdmin.value || !titles.length) return
   try {
-    const updated = await request(`${api}/${active.value.id}/subqueues`, {
+    let updated = active.value
+    for (const title of titles) updated = await request(`${api}/${active.value.id}/subqueues`, {
       method: 'POST',
-      body: JSON.stringify({ title: newSubqueueName.value }),
+      body: JSON.stringify({ title }),
     })
     active.value = updated
     queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
-    newSubqueueName.value = ''
-    toast('Подочередь добавлена')
+    pendingSubqueueTitles.value = []
+    toast(titles.length === 1 ? 'Подочередь добавлена' : `Добавлено подочередей: ${titles.length}`)
   } catch (error) {
     toast(error.message)
   }
+}
+
+function stageSubqueueDraft(draft, tags) {
+  const title = draft.value.trim()
+  if (title && !tags.value.some((tag) => tag.toLocaleLowerCase() === title.toLocaleLowerCase())) tags.value.push(title)
+  draft.value = ''
+}
+
+function handleSubqueueKeydown(event, draft, tags) {
+  if (event.key === ' ') {
+    event.preventDefault()
+    stageSubqueueDraft(draft, tags)
+  } else if (event.key === 'Enter' || event.key === ',') {
+    event.preventDefault()
+    stageSubqueueDraft(draft, tags)
+  } else if (event.key === 'Backspace' && !draft.value && tags.value.length) {
+    tags.value.pop()
+  }
+}
+
+function handleSubqueuePaste(event, draft, tags) {
+  const pasted = event.clipboardData?.getData('text') || ''
+  if (!/[\n,;]/.test(pasted)) return
+  event.preventDefault()
+  const values = [...draft.value, pasted].join('').split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean)
+  for (const value of values) {
+    if (!tags.value.some((tag) => tag.toLocaleLowerCase() === value.toLocaleLowerCase())) tags.value.push(value)
+  }
+  draft.value = ''
+}
+
+function createSubqueueKeydown(event) {
+  handleSubqueueKeydown(event, subqueueDraft, subqueueTitles)
+}
+
+function createSubqueueBlur() {
+  stageSubqueueDraft(subqueueDraft, subqueueTitles)
+}
+
+function createSubqueuePaste(event) {
+  handleSubqueuePaste(event, subqueueDraft, subqueueTitles)
+}
+
+function pendingSubqueueKeydown(event) {
+  handleSubqueueKeydown(event, newSubqueueName, pendingSubqueueTitles)
+}
+
+function pendingSubqueueBlur() {
+  stageSubqueueDraft(newSubqueueName, pendingSubqueueTitles)
+}
+
+function pendingSubqueuePaste(event) {
+  handleSubqueuePaste(event, newSubqueueName, pendingSubqueueTitles)
 }
 
 async function deleteQueue() {
@@ -455,7 +520,7 @@ onUnmounted(() => {
       <label class="field" for="title">Название показа</label><input id="title" v-model="createForm.title" placeholder="Например, макеты упаковки" required maxlength="80" />
       <label class="field" for="course">Предмет или курс</label><input id="course" v-model="createForm.course" placeholder="Дизайн-проектирование" maxlength="60" />
       <label class="field" for="teacher">Преподаватель</label><input id="teacher" v-model="createForm.teacher" placeholder="Иванова Анна Сергеевна" maxlength="60" />
-      <template v-if="!editingQueue"><label class="field" for="subqueues">Подочереди · по одной на строку</label><textarea id="subqueues" v-model="createForm.subqueuesText" placeholder="Лаб1&#10;Лаб2&#10;Лаб3" rows="3" maxlength="500"></textarea></template>
+      <template v-if="!editingQueue"><label class="field" for="subqueues">Подочереди</label><div class="subqueue-tagbox"><span v-for="(title, index) in subqueueTitles" :key="`${title}-${index}`" class="subqueue-tag">{{ title }}<button type="button" :aria-label="`Удалить ${title}`" @click="subqueueTitles.splice(index, 1)">×</button></span><input id="subqueues" v-model="subqueueDraft" placeholder="Название и пробел…" maxlength="120" @keydown="createSubqueueKeydown" @blur="createSubqueueBlur" @paste="createSubqueuePaste" /></div><p class="subqueue-help">Каждое название станет тегом по пробелу или когда вы перейдёте дальше.</p></template>
       <button class="primary submit" type="submit">{{ editingQueue ? 'Сохранить изменения' : 'Создать очередь' }} <span>→</span></button>
     </form>
   </div>
@@ -464,7 +529,7 @@ onUnmounted(() => {
     <section class="modal queue-modal">
       <div class="modal-head"><div><p class="eyebrow">{{ active.is_open ? 'СПИСОК УЧАСТНИКОВ' : 'ЗАПИСЬ ЗАКРЫТА' }}</p><h2>{{ active.title }}</h2><p class="queue-meta">{{ queueMeta }}</p></div><div class="modal-actions"><button class="share" @click="shareQueue">↗ ССЫЛКА</button><button class="close" type="button" aria-label="Закрыть" @click="closeQueue">×</button></div></div>
       <div v-if="isAdmin" class="owner-tools"><button class="manage-button" @click="toggleQueue">{{ active.is_open ? 'Закрыть все очереди' : 'Открыть все очереди' }}</button><button class="manage-button" @click="startEdit()">Изменить</button><button class="manage-button danger" @click="deleteQueue">Удалить очередь</button></div>
-      <form v-if="isAdmin" class="add-subqueue" @submit.prevent="addSubqueue"><input v-model="newSubqueueName" placeholder="Новая подочередь, например Лаб4" maxlength="120" required /><button class="manage-button" type="submit">Добавить</button></form>
+      <form v-if="isAdmin" class="add-subqueue" @submit.prevent="addSubqueue"><div class="subqueue-tagbox"><span v-for="(title, index) in pendingSubqueueTitles" :key="`${title}-${index}`" class="subqueue-tag">{{ title }}<button type="button" :aria-label="`Убрать ${title}`" @click="pendingSubqueueTitles.splice(index, 1)">×</button></span><input v-model="newSubqueueName" placeholder="Название этапа и пробел…" maxlength="120" @keydown="pendingSubqueueKeydown" @blur="pendingSubqueueBlur" @paste="pendingSubqueuePaste" /></div><button class="manage-button" type="submit">Добавить{{ pendingSubqueueTitles.length > 1 ? ` (${pendingSubqueueTitles.length})` : '' }}</button></form>
       <div class="subqueue-list">
         <section v-for="subqueue in active.subqueues" :key="subqueue.id" class="subqueue-section">
           <div class="subqueue-heading"><div><h3>{{ subqueue.title }}</h3><span class="subqueue-count">{{ subqueue.entries.length }} участников</span></div><button v-if="isAdmin" class="manage-button" @click="toggleSubqueue(subqueue)">{{ subqueue.is_open ? 'Закрыть запись' : 'Открыть запись' }}</button><span v-else class="subqueue-status" :class="{ closed: !subqueue.is_open || !active.is_open }">{{ active.is_open && subqueue.is_open ? 'ОТКРЫТА' : 'ЗАКРЫТА' }}</span></div>
