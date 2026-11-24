@@ -34,7 +34,8 @@ Nginx serves the frontend and proxies `/api/` to the backend. The API listens on
 - Queues are publicly listed and can be joined by guests or authenticated users. Each entry contains the participant-provided name.
 - Only accounts with role `admin` can create, edit, close, delete queues, or remove other participants. Registration creates role `user`; admins are assigned manually in MariaDB. The backend checks the role from the database for each authenticated request.
 - An entry can be removed by its creator using the secret returned when joining. The browser stores that secret in local storage; the database stores only its SHA-256 hash. Admins can remove any entry.
-- Duplicate queue entries are guarded by database unique constraints for account identity, visitor identity, and queue/name. Visitor IDs are kept in a long-lived HttpOnly cookie. Clearing the cookie or using another browser creates a new visitor identity.
+- Each queue card contains ordered subqueues such as lab numbers. On creation, the first subqueue opens and later ones start closed; admins manually open the next stage when the class is ready. Admins can add subqueues and open/close each one independently; old queues are migrated into one open `Общая очередь` subqueue. Duplicate entries are guarded by database unique constraints for account identity, visitor identity, and subqueue/name. Visitor IDs are kept in a long-lived HttpOnly cookie. Clearing the cookie or using another browser creates a new visitor identity.
+- Queue cards with any open subqueue appear first; fully closed queues appear last. Within each group, `activity_at` sorts descending: creation initializes it, and changing the queue's overall or a subqueue's open/closed state refreshes it. Editing metadata does not reorder the card.
 - Auth uses usernames, not email addresses. Usernames are lowercased and trimmed, must be 3–32 ASCII letters, digits, or underscores, and are unique. Passwords must be 8–128 bytes and are stored as Argon2 hashes.
 - Auth returns a public user object (`id`, `username`, `role`) and sets an HttpOnly JWT cookie. JWTs last seven days; logout records the token ID in `revoked_tokens` until expiry and clears the cookie. `QUEUE_COOKIE_SECURE=true` adds the Secure cookie attribute for HTTPS deployments.
 - Existing installations running migration `0004_use_usernames.sql` receive generated usernames in the form `user_<account-id-without-hyphens>`. That migration drops the old email column. Keep this compatibility behavior in mind when changing account schema.
@@ -47,7 +48,10 @@ Nginx serves the frontend and proxies `/api/` to the backend. The API listens on
 - `GET /api/queues`: list queues and entries; also initializes the visitor cookie when absent.
 - `POST /api/queues`: admin-only queue creation.
 - `PUT /api/queues/:id`, `DELETE /api/queues/:id`: admin-only queue management.
-- `POST /api/queues/:id/join`: join an open queue; returns the updated queue and a one-time leave token.
+- `POST /api/queues/:id/join`: legacy endpoint; joins the first open queue subqueue.
+- `POST /api/queues/:id/subqueues`: admin-only subqueue creation.
+- `PUT /api/queues/:id/subqueues/:subqueue_id/open`: admin-only subqueue open/close.
+- `POST /api/queues/:id/subqueues/:subqueue_id/join`: join a particular open subqueue; returns the updated queue and a one-time leave token.
 - `DELETE /api/queues/:id/entries/:entry_id`: leave using the `x-queue-leave-token` header.
 - `DELETE /api/queues/:id/manage/entries/:entry_id`: admin-only participant removal.
 - `GET /health`: returns 204 when MariaDB is reachable, otherwise 503.

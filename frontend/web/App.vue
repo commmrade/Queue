@@ -14,8 +14,9 @@ const authMode = ref('register')
 const darkTheme = ref(false)
 const authForm = ref({ username: '', password: '' })
 const editingQueue = ref(null)
-const createForm = ref({ title: '', course: '', teacher: '' })
-const joinName = ref('')
+const createForm = ref({ title: '', course: '', teacher: '', subqueuesText: '' })
+const joinNames = ref({})
+const newSubqueueName = ref('')
 const toastMessage = ref('')
 let toastTimer
 let refreshTimer
@@ -29,6 +30,15 @@ const queueCount = computed(() => {
 
 const queueMeta = computed(() => [active.value?.course, active.value?.teacher].filter(Boolean).join(' · ') || 'Открытая очередь')
 const isAdmin = computed(() => user.value?.role === 'admin')
+const entryCount = (queue) => queue.subqueues.reduce((total, subqueue) => total + subqueue.entries.length, 0)
+const isFullyClosed = (queue) => !queue.is_open || !queue.subqueues.some((subqueue) => subqueue.is_open)
+
+function sortQueues(items) {
+  return [...items].sort((left, right) =>
+    Number(isFullyClosed(left)) - Number(isFullyClosed(right)) ||
+      (right.activity_at ?? right.created_at) - (left.activity_at ?? left.created_at),
+  )
+}
 
 function errorMessage(body, status) {
   try {
@@ -102,15 +112,25 @@ function toggleTheme() {
   setDarkTheme(!darkTheme.value)
 }
 
-function initials(name) {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0] || '').join('').toUpperCase()
+function entryIsMe(entry) {
+  return leaveCredentials(active.value?.id).some((credential) => credential.entryId === entry.id)
 }
 
-function entryIsMe(entry) {
+function leaveCredentials(queueId) {
   try {
-    return JSON.parse(localStorage.getItem(`queue-leave-${active.value?.id}`) || 'null')?.entryId === entry.id
+    const value = JSON.parse(localStorage.getItem(`queue-leave-${queueId}`) || 'null')
+    if (Array.isArray(value)) return value
+    return value?.entryId ? [value] : []
   } catch {
-    return false
+    return []
+  }
+}
+
+function saveLeaveCredentials(queueId, credentials) {
+  try {
+    localStorage.setItem(`queue-leave-${queueId}`, JSON.stringify(credentials))
+  } catch {
+    toast('Не удалось сохранить данные для выхода из очереди в этом браузере')
   }
 }
 
@@ -129,7 +149,7 @@ function closeQueue() {
 
 async function loadQueues() {
   try {
-    queues.value = await request(api)
+    queues.value = sortQueues(await request(api))
     loadError.value = ''
     const id = location.hash.slice(1)
     if (id) openQueue(id)
@@ -142,7 +162,7 @@ async function loadQueues() {
 
 async function refresh() {
   try {
-    queues.value = await request(api)
+    queues.value = sortQueues(await request(api))
     if (active.value) {
       active.value = queues.value.find((queue) => queue.id === active.value.id) || null
       if (!active.value) closeQueue()
@@ -154,10 +174,18 @@ async function refresh() {
 
 async function createQueue() {
   try {
-    const queue = await request(api, { method: 'POST', body: JSON.stringify(createForm.value) })
-    queues.value.unshift(queue)
+    const queue = await request(api, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: createForm.value.title,
+        course: createForm.value.course,
+        teacher: createForm.value.teacher,
+        subqueues: createForm.value.subqueuesText.split('\n').map((title) => title.trim()).filter(Boolean),
+      }),
+    })
+    queues.value = sortQueues([queue, ...queues.value])
     createOpen.value = false
-    createForm.value = { title: '', course: '', teacher: '' }
+    createForm.value = { title: '', course: '', teacher: '', subqueuesText: '' }
     toast('Очередь создана — поделитесь ссылкой')
     openQueue(queue.id)
   } catch (error) {
@@ -168,14 +196,14 @@ async function createQueue() {
 function startCreate() {
   if (!isAdmin.value) return
   editingQueue.value = null
-  createForm.value = { title: '', course: '', teacher: '' }
+  createForm.value = { title: '', course: '', teacher: '', subqueuesText: '' }
   createOpen.value = true
 }
 
 function startEdit(queue = active.value) {
   if (!queue || !isAdmin.value) return
   editingQueue.value = queue
-  createForm.value = { title: queue.title, course: queue.course, teacher: queue.teacher }
+  createForm.value = { title: queue.title, course: queue.course, teacher: queue.teacher, subqueuesText: '' }
   createOpen.value = true
 }
 
@@ -186,7 +214,7 @@ async function saveQueue() {
       method: 'PUT',
       body: JSON.stringify({ ...createForm.value, is_open: editingQueue.value.is_open }),
     })
-    queues.value = queues.value.map((queue) => queue.id === updated.id ? updated : queue)
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
     active.value = updated
     createOpen.value = false
     toast('Очередь обновлена')
@@ -203,8 +231,38 @@ async function toggleQueue() {
       body: JSON.stringify({ title: active.value.title, course: active.value.course, teacher: active.value.teacher, is_open: !active.value.is_open }),
     })
     active.value = updated
-    queues.value = queues.value.map((queue) => queue.id === updated.id ? updated : queue)
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
     toast(updated.is_open ? 'Запись открыта' : 'Запись закрыта')
+  } catch (error) {
+    toast(error.message)
+  }
+}
+
+async function toggleSubqueue(subqueue) {
+  if (!isAdmin.value) return
+  try {
+    const updated = await request(`${api}/${active.value.id}/subqueues/${subqueue.id}/open`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_open: !subqueue.is_open }),
+    })
+    active.value = updated
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
+  } catch (error) {
+    toast(error.message)
+  }
+}
+
+async function addSubqueue() {
+  if (!active.value || !isAdmin.value || !newSubqueueName.value.trim()) return
+  try {
+    const updated = await request(`${api}/${active.value.id}/subqueues`, {
+      method: 'POST',
+      body: JSON.stringify({ title: newSubqueueName.value }),
+    })
+    active.value = updated
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === updated.id ? updated : queue))
+    newSubqueueName.value = ''
+    toast('Подочередь добавлена')
   } catch (error) {
     toast(error.message)
   }
@@ -222,19 +280,22 @@ async function deleteQueue() {
   }
 }
 
-async function joinQueue() {
+async function joinQueue(subqueueId) {
   if (!active.value) return
   try {
-    const result = await request(`${api}/${active.value.id}/join`, {
+    const result = await request(`${api}/${active.value.id}/subqueues/${subqueueId}/join`, {
       method: 'POST',
-      body: JSON.stringify({ name: joinName.value }),
+      body: JSON.stringify({ name: joinNames.value[subqueueId] || '' }),
     })
     const queue = result.queue
-    const entry = queue.entries[queue.entries.length - 1]
-    localStorage.setItem(`queue-leave-${queue.id}`, JSON.stringify({ entryId: entry.id, token: result.leave_token }))
+    const subqueue = queue.subqueues.find((item) => item.id === subqueueId)
+    const entry = subqueue.entries[subqueue.entries.length - 1]
+    const credentials = leaveCredentials(queue.id).filter((item) => item.entryId !== entry.id)
+    credentials.push({ entryId: entry.id, token: result.leave_token })
+    saveLeaveCredentials(queue.id, credentials)
     active.value = queue
-    joinName.value = ''
-    toast(`Вы записаны под номером ${queue.entries.length}`)
+    joinNames.value[subqueueId] = ''
+    toast(`Вы записаны в «${subqueue.title}» под номером ${subqueue.entries.length}`)
   } catch (error) {
     toast(error.message)
   }
@@ -242,12 +303,13 @@ async function joinQueue() {
 
 async function removeMe(entryId) {
   try {
-    const credentials = JSON.parse(localStorage.getItem(`queue-leave-${active.value.id}`) || 'null')
+    const credentials = leaveCredentials(active.value.id)
+    const credential = credentials.find((item) => item.entryId === entryId)
     active.value = await request(`${api}/${active.value.id}/entries/${entryId}`, {
       method: 'DELETE',
-      headers: { 'X-Queue-Leave-Token': credentials?.token || '' },
+      headers: { 'X-Queue-Leave-Token': credential?.token || '' },
     })
-    localStorage.removeItem(`queue-leave-${active.value.id}`)
+    saveLeaveCredentials(active.value.id, credentials.filter((item) => item.entryId !== entryId))
     toast('Вы вышли из очереди')
   } catch (error) {
     toast(error.message)
@@ -258,7 +320,7 @@ async function removeParticipant(entryId) {
   if (!isAdmin.value) return
   try {
     active.value = await request(`${api}/${active.value.id}/manage/entries/${entryId}`, { method: 'DELETE' })
-    queues.value = queues.value.map((queue) => queue.id === active.value.id ? active.value : queue)
+    queues.value = sortQueues(queues.value.map((queue) => queue.id === active.value.id ? active.value : queue))
     toast('Участник удалён из очереди')
   } catch (error) {
     toast(error.message)
@@ -339,15 +401,12 @@ onUnmounted(() => {
       <div v-else-if="loadError" class="blank"><div><strong>Не удалось загрузить очереди</strong>{{ loadError }}. Обновите страницу.</div></div>
       <div v-else-if="queues.length === 0" class="blank"><div><strong>Пока здесь тихо</strong>Создайте первую очередь и поделитесь ссылкой с группой.</div></div>
       <article v-for="queue in queues" :key="queue.id" class="card">
-        <div class="card-top"><span class="course">{{ queue.course || 'ПОКАЗ' }}</span><span class="live" :class="{ 'is-closed': !queue.is_open }">{{ queue.is_open ? 'ОТКРЫТА' : 'ЗАПИСЬ ЗАКРЫТА' }}</span></div>
+        <div class="card-top"><span class="course">{{ queue.course || 'ПОКАЗ' }}</span><span class="live" :class="{ 'is-closed': isFullyClosed(queue) }">{{ isFullyClosed(queue) ? 'ЗАПИСЬ ЗАКРЫТА' : 'ОТКРЫТА' }}</span></div>
         <h2>{{ queue.title }}</h2>
         <div class="teacher">{{ queue.teacher ? `Преподаватель · ${queue.teacher}` : 'Можно записаться прямо сейчас' }}</div>
+        <div class="card-subqueues"><span v-for="subqueue in queue.subqueues" :key="subqueue.id" class="subqueue-chip">{{ subqueue.title }} <b>{{ subqueue.entries.length }}</b></span></div>
         <div class="card-bottom">
-          <div class="avatars">
-            <span v-for="entry in queue.entries.slice(0, 4)" :key="entry.id" class="avatar" :title="entry.name">{{ initials(entry.name) }}</span>
-            <span v-if="queue.entries.length > 4" class="more">+{{ queue.entries.length - 4 }}</span>
-            <span class="more">{{ queue.entries.length }} чел.</span>
-          </div>
+          <span class="more">Всего участников: {{ entryCount(queue) }}</span>
           <div class="card-actions"><button v-if="isAdmin" class="manage-link" @click="startEdit(queue)">Изменить</button><button class="join" @click="openQueue(queue.id)">Открыть очередь →</button></div>
         </div>
       </article>
@@ -362,6 +421,7 @@ onUnmounted(() => {
       <label class="field" for="title">Название показа</label><input id="title" v-model="createForm.title" placeholder="Например, макеты упаковки" required maxlength="80" />
       <label class="field" for="course">Предмет или курс</label><input id="course" v-model="createForm.course" placeholder="Дизайн-проектирование" maxlength="60" />
       <label class="field" for="teacher">Преподаватель</label><input id="teacher" v-model="createForm.teacher" placeholder="Иванова Анна Сергеевна" maxlength="60" />
+      <template v-if="!editingQueue"><label class="field" for="subqueues">Подочереди · по одной на строку</label><textarea id="subqueues" v-model="createForm.subqueuesText" placeholder="Лаб1&#10;Лаб2&#10;Лаб3" rows="3" maxlength="500"></textarea></template>
       <button class="primary submit" type="submit">{{ editingQueue ? 'Сохранить изменения' : 'Создать очередь' }} <span>→</span></button>
     </form>
   </div>
@@ -369,16 +429,21 @@ onUnmounted(() => {
   <div v-if="queueOpen && active" class="modal-backdrop" @click.self="closeQueue">
     <section class="modal queue-modal">
       <div class="modal-head"><div><p class="eyebrow">{{ active.is_open ? 'СПИСОК УЧАСТНИКОВ' : 'ЗАПИСЬ ЗАКРЫТА' }}</p><h2>{{ active.title }}</h2><p class="queue-meta">{{ queueMeta }}</p></div><div class="modal-actions"><button class="share" @click="shareQueue">↗ ССЫЛКА</button><button class="close" type="button" aria-label="Закрыть" @click="closeQueue">×</button></div></div>
-      <div v-if="isAdmin" class="owner-tools"><button class="manage-button" @click="toggleQueue">{{ active.is_open ? 'Закрыть запись' : 'Открыть запись' }}</button><button class="manage-button" @click="startEdit()">Изменить</button><button class="manage-button danger" @click="deleteQueue">Удалить очередь</button></div>
-      <form v-if="active.is_open" class="join-form" @submit.prevent="joinQueue"><input v-model="joinName" placeholder="Ваша фамилия" required maxlength="50" autocomplete="name" /><button class="primary" type="submit">Записаться <span>→</span></button></form>
-      <div class="list-label">Очередь · {{ active.entries.length }}</div>
-      <ol class="people">
-        <li v-if="active.entries.length === 0" class="empty-list">Пока никто не записался. Будьте первыми!</li>
-        <li v-for="(entry, index) in active.entries" :key="entry.id" class="person">
-          <span class="number">{{ String(index + 1).padStart(2, '0') }}</span><span class="person-name">{{ entry.name }}</span>
-          <span v-if="entryIsMe(entry)" class="you">ЭТО ВЫ</span><button v-if="entryIsMe(entry)" class="remove" title="Удалить себя" @click="removeMe(entry.id)">×</button><button v-else-if="isAdmin" class="remove" title="Удалить участника" @click="removeParticipant(entry.id)">×</button>
-        </li>
-      </ol>
+      <div v-if="isAdmin" class="owner-tools"><button class="manage-button" @click="toggleQueue">{{ active.is_open ? 'Закрыть все очереди' : 'Открыть все очереди' }}</button><button class="manage-button" @click="startEdit()">Изменить</button><button class="manage-button danger" @click="deleteQueue">Удалить очередь</button></div>
+      <form v-if="isAdmin" class="add-subqueue" @submit.prevent="addSubqueue"><input v-model="newSubqueueName" placeholder="Новая подочередь, например Лаб4" maxlength="120" required /><button class="manage-button" type="submit">Добавить</button></form>
+      <div class="subqueue-list">
+        <section v-for="subqueue in active.subqueues" :key="subqueue.id" class="subqueue-section">
+          <div class="subqueue-heading"><div><h3>{{ subqueue.title }}</h3><span class="subqueue-count">{{ subqueue.entries.length }} участников</span></div><button v-if="isAdmin" class="manage-button" @click="toggleSubqueue(subqueue)">{{ subqueue.is_open ? 'Закрыть запись' : 'Открыть запись' }}</button><span v-else class="subqueue-status" :class="{ closed: !subqueue.is_open || !active.is_open }">{{ active.is_open && subqueue.is_open ? 'ОТКРЫТА' : 'ЗАКРЫТА' }}</span></div>
+          <form v-if="active.is_open && subqueue.is_open" class="join-form" @submit.prevent="joinQueue(subqueue.id)"><input v-model="joinNames[subqueue.id]" placeholder="Ваша фамилия" required maxlength="50" autocomplete="name" /><button class="primary" type="submit">Записаться <span>→</span></button></form>
+          <ol class="people">
+            <li v-if="subqueue.entries.length === 0" class="empty-list">В этой подочереди пока никого нет.</li>
+            <li v-for="(entry, index) in subqueue.entries" :key="entry.id" class="person">
+              <span class="number">{{ String(index + 1).padStart(2, '0') }}</span><span class="person-name">{{ entry.name }}</span>
+              <span v-if="entryIsMe(entry)" class="you">ЭТО ВЫ</span><button v-if="entryIsMe(entry)" class="remove" title="Удалить себя" @click="removeMe(entry.id)">×</button><button v-else-if="isAdmin" class="remove" title="Удалить участника" @click="removeParticipant(entry.id)">×</button>
+            </li>
+          </ol>
+        </section>
+      </div>
     </section>
   </div>
 

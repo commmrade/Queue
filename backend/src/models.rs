@@ -90,8 +90,9 @@ pub(crate) struct Queue {
     pub(crate) title: String,
     pub(crate) course: String,
     pub(crate) teacher: String,
-    pub(crate) entries: Vec<Entry>,
+    pub(crate) subqueues: Vec<Subqueue>,
     pub(crate) created_at: u64,
+    pub(crate) activity_at: u64,
     pub(crate) is_open: bool,
     pub(crate) owner_id: Uuid,
 }
@@ -100,6 +101,14 @@ pub(crate) struct Queue {
 pub(crate) struct Entry {
     pub(crate) id: Uuid,
     pub(crate) name: String,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct Subqueue {
+    pub(crate) id: Uuid,
+    pub(crate) title: String,
+    pub(crate) is_open: bool,
+    pub(crate) entries: Vec<Entry>,
 }
 
 #[derive(FromRow)]
@@ -111,23 +120,14 @@ pub(crate) struct QueueRow {
     pub(crate) teacher: String,
     pub(crate) is_open: bool,
     pub(crate) created_at: u64,
+    pub(crate) activity_at: u64,
 }
 
 #[derive(FromRow)]
-pub(crate) struct EntryRow {
-    pub(crate) id: String,
-    pub(crate) name: String,
-}
-
-#[derive(FromRow)]
-pub(crate) struct QueueListRow {
-    pub(crate) id: String,
-    pub(crate) owner_id: String,
-    pub(crate) title: String,
-    pub(crate) course: String,
-    pub(crate) teacher: String,
-    pub(crate) is_open: bool,
-    pub(crate) created_at: u64,
+pub(crate) struct SubqueueEntryRow {
+    pub(crate) subqueue_id: String,
+    pub(crate) subqueue_title: String,
+    pub(crate) subqueue_is_open: bool,
     pub(crate) entry_id: Option<String>,
     pub(crate) entry_name: Option<String>,
 }
@@ -142,8 +142,9 @@ impl TryFrom<QueueRow> for Queue {
             title: row.title,
             course: row.course,
             teacher: row.teacher,
-            entries: Vec::new(),
+            subqueues: Vec::new(),
             created_at: row.created_at,
+            activity_at: row.activity_at,
             is_open: row.is_open,
         })
     }
@@ -166,6 +167,8 @@ pub(crate) struct CreateQueue {
     pub(crate) title: String,
     pub(crate) course: String,
     pub(crate) teacher: String,
+    #[serde(default)]
+    pub(crate) subqueues: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -179,4 +182,14 @@ pub(crate) struct UpdateQueue {
 #[derive(Deserialize)]
 pub(crate) struct JoinQueue {
     pub(crate) name: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CreateSubqueue {
+    pub(crate) title: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetSubqueueOpen {
+    pub(crate) is_open: bool,
 }

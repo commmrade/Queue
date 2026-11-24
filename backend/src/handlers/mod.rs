@@ -19,6 +19,15 @@ pub(crate) fn router(state: AppState) -> Router {
             get(queues::list_queues).post(queues::create_queue),
         )
         .route("/api/queues/:id/join", post(queues::join_queue))
+        .route("/api/queues/:id/subqueues", post(queues::create_subqueue))
+        .route(
+            "/api/queues/:id/subqueues/:subqueue_id/open",
+            axum::routing::put(queues::set_subqueue_open),
+        )
+        .route(
+            "/api/queues/:id/subqueues/:subqueue_id/join",
+            post(queues::join_subqueue),
+        )
         .route(
             "/api/queues/:id/entries/:entry_id",
             axum::routing::delete(queues::leave_queue),
